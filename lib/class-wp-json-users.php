@@ -53,7 +53,9 @@ class WP_JSON_Users {
 	 */
 	public function get_users( $filter = array(), $context = 'view', $page = 1 ) {
 		if ( ! current_user_can( 'list_users' ) ) {
-			return new WP_Error( 'json_user_cannot_list', __( 'Sorry, you are not allowed to list users.' ), array( 'status' => 403 ) );
+			if(!apply_filters( 'json_user_query_without_login', $filter)){
+				return new WP_Error( 'json_user_cannot_list', __( 'Sorry, you are not allowed to list users.' ), array( 'status' => 403 ) );
+			}
 		}
 
 		$args = array(
