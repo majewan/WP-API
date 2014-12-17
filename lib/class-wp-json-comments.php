@@ -16,12 +16,13 @@ class WP_JSON_Comments {
 	 */
 	public function register_routes( $routes ) {
 		$routes[ $this->base ] = array(
-			array( array( $this, 'get_comments' ),   WP_JSON_Server::READABLE ),
+      array( array( $this, 'get_comments' ),   WP_JSON_Server::READABLE ),
+      array( array( $this, 'add_comment' ), WP_JSON_Server::CREATABLE | WP_JSON_Server::ACCEPT_JSON )
 		);
 		$routes[ $this->base . '/(?P<comment>\d+)'] = array(
 			array( array( $this, 'get_comment' ),    WP_JSON_Server::READABLE ),
 			array( array( $this, 'delete_comment' ), WP_JSON_Server::DELETABLE ),
-		);
+    );
 
 		return $routes;
 	}
@@ -235,5 +236,101 @@ class WP_JSON_Comments {
 	 */
 	public function _deprecated_call( $method, $args ) {
 		return call_user_func_array( array( $this, $method ), $args );
-	}
+  }
+
+
+
+  /**
+   * Create a new comment.
+   * param array $data Content data. Can contain:
+   * -comment_post_ID => 1,
+   * -comment_author => "admin",
+   * -comment_author_email => "admin@admin.com',
+   * -comment_author_url =>"http://',
+   * -comment_content => "content here",
+   * -comment_type => ("comment', "trackback", "pingback"),
+   * -comment_parent => 0,
+   * -user_id => 1,
+   * -comment_author_IP => "127.0.0.1",
+   * -comment_agent => "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.0.10) >Gecko/2009042316 Firefox/3.0.10 (.NET CLR 3.5.30729)",
+   * -comment_date => $time,
+   * -comment_approved => 1,
+   * return new comment_ID
+   */
+  public function add_comment($id, $data){
+    $id = (int) $id;
+    $commentdata = array();
+    if(empty($id)){
+      return new WP_Error( "json_post_invalid_id", __( "Invalid post ID." ), array( "status" => 404 ) );
+    }
+    $post = get_post( $id, ARRAY_A );
+    if(empty($post["ID"])){
+      return new WP_Error( "json_post_invalid_id", __( "Invalid post ID." ), array( "status" => 404 ) );
+    }
+
+    $commentdata["comment_post_ID"] = $id;
+
+    if(!comments_open($id)){
+      return new WP_Error( "json_comment_restricted", __( "Comment not allowed here." ), array( "status" => 403 ) );
+    }
+    $current_user = wp_get_current_user();
+    if($current_user instanceof WP_User && $current_user->ID != 0){
+      $commentdata["user_id"] = $current_user->ID;
+      $commentdata["comment_author_email"] = $current_user->user_email;
+      $commentdata["comment_author"] = $current_user->display_name;
+      $commentdata["comment_author_url"] = $current_user->user_url;
+    }else{
+      if(empty($data["author"]) || empty($data["author_email"])){
+        return new WP_Error( "json_comment_author_empty", __( "Empty email or name." ), array( "status" => 400 ));
+      }
+      if(!empty( $data["author_email"])){
+        //maybe check if user_id corresponds with email
+        $commentdata["comment_author_email"] = $data["author_email"];
+      }
+      if(!empty( $data["author"])){
+        //maybe check if user_id corresponds with author
+        $commentdata["comment_author"] = $data["author"];
+      }
+      if(!empty( $data["author_website"])){$commentdata["comment_author_url"] = $data["author_website"];}
+    }
+    if(!empty( $data["comment_content"])){
+      if(empty($data["comment_content"]))
+        return new WP_Error( "json_empty_value", __( "No content" ), array( "status" => 400 ) );
+      $commentdata["comment_content"] = $data["comment_content"];
+    }
+    if(!empty( $data["type"])){
+      //future support for custom comment types
+      if($data["type"] != "comment" || $data["type"] != "trackback" || $data["type"] != "pingback")
+        return new WP_Error( "json_invalid_comment_type", __( "Invalid comment type" ), array( "status" => 400 ) );
+      $commentdata["comment_type"] = $data["type"];
+    }else{
+      $commentdata["comment_type"] = 'comment';
+    }
+    if(!empty( $data["parent"])){$commentdata["comment_parent"] = $data["parent"];}
+
+    if(!empty( $data["date"])){$commentdata["comment_date"] = $data["date"];}
+
+    if(!empty( $data["approved"])){$commentdata["comment_approved"] = $data["approved"];}
+
+    function fix_comment_allow_die(){
+      static $enable = true;
+      $args = func_get_args();
+      if ($args && $args[0] == 'success'){
+        $enable = false;
+        return;
+      }
+      if( $enable ){
+        http_response_code(400);
+        echo json_encode(array(array( 'code' => 'json_duplicate_comment', 'message' => 'This comment already exists.')));
+      }
+    }
+    register_shutdown_function('fix_comment_allow_die');
+
+    $comment_ID = wp_new_comment($commentdata);
+    fix_comment_allow_die('success');
+    if($comment_ID === false){
+      return new WP_Error( "json_invalid_comment", __( "Invalid comment, or already existing." ), array( "status" => 400 ) );
+    }
+    return $this->get_comment($comment_ID);
+  }
 }
