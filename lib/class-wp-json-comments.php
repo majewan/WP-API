@@ -281,7 +281,7 @@ class WP_JSON_Comments {
       $commentdata["comment_author_url"] = $current_user->user_url;
     }else{
       if(empty($data["author"]) || empty($data["author_email"])){
-        return new WP_Error( "json_comment_author_empty", __( "Empty email or name." ), array( "status" => 400 ));
+        //return new WP_Error( "json_comment_author_empty", __( "Empty email or name." ), array( "status" => 400 ));
       }
       if(!empty( $data["author_email"])){
         //maybe check if user_id corresponds with email
