@@ -182,7 +182,7 @@ class WP_JSON_Comments {
 				'ID'     => 0,
 				'name'   => $comment->comment_author,
 				'URL'    => $comment->comment_author_url,
-				'avatar' => json_get_avatar_url( $comment->comment_author_email ),
+				'avatar' => json_get_avatar_url( $comment ),
 			);
 		}
 
